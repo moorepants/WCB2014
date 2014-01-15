@@ -1,0 +1,77 @@
+\documentclass[10pt,letterpaper,notitlepage,twocolumn]{article}
+
+\usepackage[top=0.75in, bottom=0.75in, left=0.5in, right=0.5in]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+
+\title{Identification of human control during perturbed walking}
+\author{
+  Jason K. Moore, Sandra K. Hnat, Antonie J. van den Bogert\\
+  Human Motion and Control Laboratory, Cleveland State University, Cleveland, Ohio, USA\\
+  Email: j.k.moore19@csuohio.edu Web: http://hmc.csuohio.edu
+}
+\date{}
+
+\begin{document}
+\pagenumbering{gobble} % removes page numbers
+
+\maketitle
+
+\section*{Introduction}
+%
+This abstract introduces the results of identifying a simple linear controller
+from a large set of data collected from able bodied walkers under prescribed
+random longitudinal and/or lateral perturbations. The controller structure is
+defined with assistive powered prosthetics application in mind. We show that
+the identified controller is able to accurately generate estimated joint
+torques.
+%
+\section*{Methods}
+%
+Herein we the example results are from data collected from a single subject
+(age: 25, mass: 101 kg, height: 187 cm) walking at nominal speed of 1.2 m/s on
+a treadmill (ForceLink R-Mill) while being longitudinally perturbed, i.e. a
+random white noise with 5\% std around the nominal belt speed. We collect data
+for four minutes at 100 Hz which includes about 200 steps. We compute the
+ankle plantarflexion, knee flexion, and hip flexion angles, rates, and moments
+using basic 2D inverse dynamics \cite{Winter}. % TODO : Add references.
+
+We section the inverse dynamics time series into steps based on the right
+foot's heel strike and interpolate 20 evenly spaced data points for each series
+along the gait cycle. We assume a simple proportional derivative controller
+that generates the joint torques given the joint angles and rates that fits
+this form:
+%
+\begin{equation}
+  m_m(\varphi) = m^*(\varphi) - \mathbf{K}s_m(\varphi)
+\end{equation}
+%
+where $\varphi$ is the time in the right leg gait cycle, $m_m(\varphi)$ is a
+vector of measured joint torques, $m^*(\varphi)$ are the joint torques employed
+if the feedback error is zero, $\mathbf{K}$ is the gain matrix which multiplies
+the error in the joint angles and rates with respect to the set point. This
+form is linear in unknown parameters, $m^*(\varphi)$ and $\mathbf{K}$ and can
+be solved for using linear least squares given enough measured data.
+%
+\section*{Results}
+%
+Here we show an example results from a controller structure which is limited
+such that the joint torques are only generated from the error in the sensors
+from that same joint. Figure \ref{fig:fit} shows an example prediction of the
+measured ankle plantarflexion torque in the right leg by the identified control
+model with a variance accounted for [VAF] of 76.8\%.
+%
+\begin{figure}
+  \begin{center}
+    \includegraphics[width=\columnwidth]{fig/fit.pdf}
+    \label{fig:fit}
+    %\caption{Needs one.}
+  \end{center}
+\end{figure}
+%
+\section*{Discussion}
+%
+We are able to identify various linear controllers that are able to predict the
+measured joint torques with relative high accuracy in all joints that will be
+likely useful in control design for power prosthetics.
+\end{document}
