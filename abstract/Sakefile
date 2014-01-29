@@ -1,0 +1,33 @@
+clean data:
+    help: Cleanses the raw data.
+    # dependencies should probably inclue the raw data files stored elsewhere
+    dependencies:
+        - /home/moorepants/Data/human-gait/gait-control-identification/T006/mocap-006.txt
+        - /home/moorepants/Data/human-gait/gait-control-identification/T006/record-006.txt
+        - /home/moorepants/Data/human-gait/gait-control-identification/T006/meta-006.yml
+        - src/clean_data.py
+    formula: python src/clean_data.py;
+    output:
+        - data/perturbation.h5
+plot:
+    help: plots results
+    dependencies:
+        - data/perturbation.h5
+        - src/plots.py
+    formula: python src/plots.py;
+    output:
+        - fig/fit.pdf
+        - fig/gains.pdf
+paper:
+    help: compiles latex paper
+    dependencies:
+        - moore.tex
+        - fig/gains.pdf
+        - fig/fit.pdf
+    formula: >
+        pdflatex moore.tex
+        bibtex moore.aux
+        pdflatex moore.tex
+        pdflatex moore.tex
+    output:
+        - moore.pdf

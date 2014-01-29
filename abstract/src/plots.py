@@ -1,73 +1,31 @@
 #/usr/bin/env python
 
-from os.path import join
+from os.path import join, split
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas
 from dtk import process
-from gaitanalysis import motek, gait, controlid
+from gaitanalysis import gait, controlid
 from gaitanalysis.utils import _percent_formatter
 
-# TODO : Setup some kind of dependency chain so the big computations can be
-# avoided if the previous data is fine.
+directory = split(__file__)[0]
 
-# TODO : Load this path from a configuration file, our download from
-# Figshare once I post the data.
-root_data_directory = "/home/moorepants/Data/human-gait/gait-control-identification"
-
-mocap_file_path = join(root_data_directory, 'T006', 'mocap-006.txt')
-record_file_path = join(root_data_directory, 'T006', 'record-006.txt')
-meta_file_path = join(root_data_directory, 'T006', 'meta-006.yml')
-
-dflow_data = motek.DFlowData(mocap_file_path, record_file_path,
-                             meta_file_path)
-dflow_data.clean_data(interpolate_markers=True)
-
-# 'TreadmillPerturbation' is the current name of the longitudinal
-# perturbation trials. This returns a data frame of processed data.
-perturbation_data_frame = \
-    dflow_data.extract_processed_data(event='TreadmillPerturbation',
-                                      index_col='TimeStamp')
-
-# Here I compute the joint angles, rates, and torques.
-inv_dyn_low_pass_cutoff = 6.0  # Hz
-inv_dyn_labels = motek.markers_for_2D_inverse_dynamics()
-
-
-def add_negative_columns(data):
-    """Creates new columns in the DataFrame for any D-Flow measurements in
-    the Z axis."""
-    new_inv_dyn_labels = []
-    for label_set in inv_dyn_labels:
-        new_label_set = []
-        for label in label_set:
-            if 'Z' in label:
-                new_label = 'Negative' + label
-                data[new_label] = -data[label]
-            else:
-                new_label = label
-            new_label_set.append(new_label)
-        new_inv_dyn_labels.append(new_label_set)
-    return new_inv_dyn_labels
-
-
-new_inv_dyn_labels = add_negative_columns(perturbation_data_frame)
+perturbation_data_frame = pandas.read_hdf(join(directory,
+                                               '../data/perturbation.h5'),
+                                          'table')
 
 perturbation_data = gait.WalkingData(perturbation_data_frame)
-
-args = new_inv_dyn_labels + [dflow_data.meta['subject']['mass'],
-                             inv_dyn_low_pass_cutoff]
-
-perturbation_data.inverse_dynamics_2d(*args)
 
 # The following identifies the steps based on vertical ground reaction
 # forces.
 perturbation_data.grf_landmarks('FP2.ForY', 'FP1.ForY',
                                 filter_frequency=15.0,
-                                num_steps_to_plot=None, do_plot=True,
+                                num_steps_to_plot=None, do_plot=False,
                                 threshold=30.0, min_time=290.0)
-perturbation_data_right_steps = perturbation_data.split_at('right',
-                                                           num_samples=20)
+perturbation_data_right_steps = \
+    perturbation_data.split_at('right', num_samples=20,
+                               belt_speed_column='RightBeltSpeed')
 
 # Controller identification.
 sensors = ['Right.Ankle.Flexion.Angle',
@@ -101,6 +59,91 @@ for i, row in enumerate(gain_omission_matrix):
 gains, controls_star, variance, gain_var, control_var, estimated_controls = \
     perturbation_data_solver.solve(gain_omission_matrix=gain_omission_matrix)
 
+# Gain plot
+
+fig_width_pt = 234.8775  # column width in abstract
+inches_per_pt = 1.0 / 72.27
+
+params = {'backend': 'ps',
+          'font.family': 'serif',
+          'font.serif': 'times',
+          'axes.labelsize': 6,
+          'text.fontsize': 6,
+          'legend.fontsize': 6,
+          'xtick.labelsize': 4,
+          'ytick.labelsize': 4,
+          'axes.titlesize': 6,
+          'text.usetex': True,
+          'figure.figsize': (fig_width_pt * inches_per_pt,
+                             fig_width_pt * inches_per_pt * 0.80)}
+
+plt.rcParams.update(params)
+
+fig, axes = plt.subplots(3, 2, sharex=True)
+
+for i, row in enumerate(['Ankle', 'Knee', 'Hip']):
+    for j, (col, unit) in enumerate(zip(['Angle', 'Rate'],
+                                        ['Nm/rad', r'Nm $\cdot$ s/rad'])):
+        for side, marker, color in zip(['Right', 'Left'],
+                                       ['o', 'o'],
+                                       ['Blue', 'Red']):
+
+            row_label = '.'.join([side, row, 'PlantarFlexion.Moment'])
+            col_label = '.'.join([side, row, 'Flexion', col])
+
+            gain_row_idx = controls.index(row_label)
+            gain_col_idx = sensors.index(col_label)
+
+            gains_per = gains[:, gain_row_idx, gain_col_idx]
+            sigma = np.sqrt(gain_var[:, gain_row_idx, gain_col_idx])
+
+            percent_of_gait_cycle = \
+                perturbation_data_solver.identification_data.iloc[0].index.values.astype(float)
+
+            xlim = (percent_of_gait_cycle[0], percent_of_gait_cycle[-1])
+
+            if side == 'Left':
+                # Shift that diggidty-dogg signal 50%
+                # This only works for an even number of samples.
+                if len(percent_of_gait_cycle) % 2 != 0:
+                    raise StandardError("Doesn't work with odd samples.")
+
+                first = percent_of_gait_cycle[percent_of_gait_cycle < 0.5] + 0.5
+                second = percent_of_gait_cycle[percent_of_gait_cycle > 0.5] - 0.5
+                percent_of_gait_cycle = np.hstack((first, second))
+
+                # sort and sort gains/sigma same way
+                sort_idx = np.argsort(percent_of_gait_cycle)
+                percent_of_gait_cycle = percent_of_gait_cycle[sort_idx]
+                gains_per = gains_per[sort_idx]
+                sigma = sigma[sort_idx]
+
+            axes[i, j].fill_between(percent_of_gait_cycle,
+                                    gains_per - sigma,
+                                    gains_per + sigma,
+                                    alpha=0.5,
+                                    color=color)
+
+            axes[i, j].plot(percent_of_gait_cycle, gains_per,
+                            marker='o',
+                            ms=2,
+                            color=color,
+                            label=side)
+
+            #axes[i, j].set_title(' '.join(col_label.split('.')[1:]))
+            axes[i, j].set_title(r"{}: {} $\rightarrow$ Moment".format(row, col))
+
+            axes[i, j].set_ylabel(unit)
+
+            if i == 2:
+                axes[i, j].set_xlabel(r'\% of Gait Cycle')
+                axes[i, j].xaxis.set_major_formatter(_percent_formatter)
+                axes[i, j].set_xlim(xlim)
+
+plt.tight_layout()
+
+fig.savefig(join(directory, '../fig/gains.pdf'))
+
 # Fit plot.
 estimated_walking = \
     pandas.concat([df for k, df in estimated_controls.iteritems()],
@@ -111,8 +154,11 @@ actual_walking = \
                    perturbation_data_solver.validation_data.iteritems()],
                   ignore_index=True)
 
-params = {'figure.figsize': (fig_width_pt * inches_per_pt,
-                             fig_width_pt * inches_per_pt * 0.5)}
+params = {
+          'axes.labelsize': 8,
+          'xtick.labelsize': 6,
+          'ytick.labelsize': 6,
+          }
 
 plt.rcParams.update(params)
 
@@ -126,14 +172,15 @@ error = measured - predicted
 rms = np.sqrt(np.linalg.norm(error).mean())
 r_squared = process.coefficient_of_determination(measured, predicted)
 
-ax.plot(sample_number, measured, color='black', marker='.', ms=6)
-ax.errorbar(sample_number, predicted, yerr=std_of_predicted, fmt='.', ms=4)
+ax.plot(sample_number, measured, color='black')
+ax.plot(sample_number, predicted, color='blue', ms=4)
+#ax.errorbar(sample_number, predicted, yerr=std_of_predicted, fmt='.', ms=4)
 ax.set_ylabel('Right Ankle Torque')
 ax.set_xlabel('Sample Number')
 # TODO : Figure out how to get matplotlib + tex to print the percent sign.
-ax.legend(('Measured', 'Estimated [VAF={:1.1%}%]'.format(r_squared)))
+ax.legend(('Measured', r'Estimated [VAF={:1.0f}\%]'.format(r_squared * 100.0)))
 ax.set_xlim((100, 200))
 
 plt.tight_layout()
 
-fig.savefig('../fig/fit.pdf')
+fig.savefig(join(directory, '../fig/fit.pdf'))
