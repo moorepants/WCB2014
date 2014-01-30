@@ -1,0 +1,29 @@
+This abstract introduces example results from identifying a linear controller
+from a set of data collected from able-bodied walkers under random longitudinal
+perturbations. We show that the identified controller is able to accurately
+generate estimated joint torques with feedback control.<br />The example
+results are from data collected from a single subject (age: 25, mass: 101 kg,
+height: 187 cm) walking at nominal speed of 1.2 m/s on a treadmill while being
+longitudinally perturbed with random white noise. We collect data for four
+minutes at 100 Hz which includes about 200 steps. We compute the ankle
+plantarflexion, knee flexion, and hip flexion angles, rates, and moments using
+2D inverse dynamics. We section the resulting time series into steps based on
+the right foot's heel strike and interpolate 20 evenly spaced data points along
+the gait cycle. We assume a simple scheduled proportional derivative controller
+that generates the joint torques given the joint angles and rates that fits the
+following form:<br />m(t) = m*(p(t)) - K(p(t)) s(t)<br />where t is an instance
+of time, p(t) is the phase in the right leg gait cycle, m(t) is a vector of
+joint torques, m^*(p(t)) is a vector of the reference joint torques, K(p(t)) is
+a gain matrix which multiplies the vector of joint angles and rates, s(t). This
+equation is linear in the gains and the reference torques. Given sufficient
+joint angle, rate, and torque measurements, the reference torques and the gains
+can be solved for using linear least squares.<br />Here we present an example
+result from a controller structure which is limited to joint torque generation
+only from error in the sensors from the same joint. Figure 1a shows the
+estimates of the scheduled gains with respect to the percent gait cycle in each
+leg and Figure 1b an example prediction of the measured ankle plantarflexion
+torque in the right leg by the identified control model. We are able to
+identify various linear controllers that are able to predict the measured joint
+torques with relative high accuracy in all joints that will be likely useful in
+control design for powered prosthetics.<br
+/>$$graphic_{D72F37CE-34D5-44A4-9E6B-049EB1D38377}$$
